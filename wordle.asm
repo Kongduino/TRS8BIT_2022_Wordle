@@ -1,4 +1,4 @@
-	ORG 0xD4FF
+	ORG 0xD469
 MAIN:	CALL CLS
 	CALL SETSYS
 	MVI A,1
@@ -105,12 +105,6 @@ SKIP00:	MOV L,A
 	PUSH PSW
 	LXI D,OFFSET
 	SHLX ; (DE) = HL Save the offset
-	; CALL PRTINT ; print the word offset
-	; MVI A,0x5D
-	; CALL LCD ; ]
-	; MVI A,32
-	; CALL LCD ; and a space
-	; CALL CHGET
 	LXI D, BLOCKNUM
 	LHLX ; Retrieve the block number
 	MOV B, H
@@ -305,10 +299,13 @@ ASK00:	STA ROUND
 	CALL LCD ; Show ROUND + ". "
 	LXI H,TRY0 ; Buffer to save current try
 ASK01:	PUSH H
-ASK03:	CALL CHGET
+ASK03:	CALL KEYX
+	JC MENU
+	JZ ASK03
+	CALL CHGET
 	CPI 'A
 	JM ASK03
-	CPI 'Z
+	CPI '[
 	JP ASK03
 	POP H
 	MOV M,A
@@ -324,9 +321,12 @@ ASK03:	CALL CHGET
 	STA LETTER
 	INX H
 	JMP ASK01
-ASK02:	MVI A,1
-	MVI B,8
-	CALL CURSOR
+ASK02:
+	; MVI A,1
+	; MVI B,8
+	; CALL CURSOR
+	MVI A,32
+	CALL LCD
 	LXI H,YOUTRIED
 	CALL DISPLAY
 	LXI H,TRY0
@@ -432,6 +432,8 @@ COMPARE9:	LXI H,CHOICE4
 	JNZ COMPARE6 ; is it a close match?
 COMPARE6A:	ADI 0x20 ; lowercase
 	STA RSLT0 ; save into result
+	STA TRY0
+	MOV M,A ; Since HL has the CHOICEx where we found it
 COMPARE6:	LDA RSLT1
 	CPI 0x2A ; *
 	JNZ COMPARE10 ; Exact match, already done
@@ -450,6 +452,8 @@ COMPARE13:	LXI H,CHOICE4
 	JNZ COMPARE10 ; is it a close match?
 COMPARE10A:	ADI 0x20 ; lowercase
 	STA RSLT1 ; save into result
+	STA TRY1
+	MOV M,A ; Since HL has the CHOICEx where we found it
 COMPARE10:	LDA RSLT2
 	CPI 0x2A ; *
 	JNZ COMPARE14 ; Exact match, already done
@@ -468,6 +472,8 @@ COMPARE17:	LXI H,CHOICE4
 	JNZ COMPARE14 ; is it a close match?
 COMPARE14A:	ADI 0x20 ; lowercase
 	STA RSLT2 ; save into result
+	STA TRY2
+	MOV M,A ; Since HL has the CHOICEx where we found it
 COMPARE14:	LDA RSLT3
 	CPI 0x2A ; *
 	JNZ COMPARE18 ; Exact match, already done
@@ -486,6 +492,8 @@ COMPARE21:	LXI H,CHOICE4
 	JNZ COMPARE18 ; is it a close match?
 COMPARE18A:	ADI 0x20 ; lowercase
 	STA RSLT3 ; save into result
+	STA TRY3
+	MOV M,A ; Since HL has the CHOICEx where we found it
 COMPARE18:	LDA RSLT4
 	CPI 0x2A ; *
 	JNZ COMPARE22 ; Exact match, already done
@@ -504,13 +512,58 @@ COMPARE25:	LXI H,CHOICE3
 	JNZ COMPARE22 ; is it a close match?
 COMPARE22A:	ADI 0x20 ; lowercase
 	STA RSLT4 ; save into result
-COMPARE22:	LDA ROUND
+	STA TRY4
+	MOV M,A ; Since HL has the CHOICEx where we found it
+COMPARE22:
+	; LDA ROUND
+	; ADI 2 ; Line 2 + ROUND (2-->6)
+	; MOV B,A
+	; MVI A,20
+	; CALL CURSOR ; cursor 1,[2-->6]
+	; LXI H,RSLT0
+	; CALL DISPLAY
+
+	LDA ROUND
 	ADI 2 ; Line 2 + ROUND (2-->6)
 	MOV B,A
-	MVI A,20
-	CALL CURSOR ; cursor 1,[2-->6]
+	MVI A,4
+	CALL CURSOR ; cursor 4,[2-->6]
+	LXI H,RSLT0
+	XRA A
+COMPARE29:	PUSH H
+	PUSH PSW
+	MOV A,M
+	CPI 0x2A ; * - false
+	JNZ COMPARE26
+	MVI A,0xFF ; grey block
+	JMP COMPARE27
+COMPARE26:
+	CPI '[
+	JM COMPARE27 ; A-Z: display
+	PUSH PSW
+	CALL ENTREV ; Sets reverse character mode. ESC - p
+	POP PSW
+	SUI 0x20 ; uppercase
+	CALL LCD
+	CALL EXTREV ; Turns off reverse character mode. ESC - q
+	JMP COMPARE28
+COMPARE27:	CALL LCD
+COMPARE28:	MVI A,32
+	CALL LCD
+	MVI A,ROUND
+	ADI 2
+	MOV B,A
+	MVI A,30
+	CALL CURSOR
 	LXI H,RSLT0
 	CALL DISPLAY
+	POP PSW
+	POP H
+	INX H
+	INR A
+	CPI 5
+	JNZ COMPARE29
+
 	LDA ROUND
 	INR A
 	CPI 6
@@ -536,6 +589,23 @@ LANDING:	PUSH H
 	CALL ERAEOL
 	POP H
 	CALL DISPLAY
+	LXI D,OFFSET
+	MOV A,M
+	STA CHOICE0
+	INX H
+	MOV A,M
+	STA CHOICE1
+	INX H
+	MOV A,M
+	STA CHOICE2
+	INX H
+	MOV A,M
+	STA CHOICE3
+	INX H
+	MOV A,M
+	STA CHOICE4
+	LXI H,CHOICE0
+	CALL DISPLAY
 
 	CALL CHGET
 	CPI 'Q
@@ -545,6 +615,9 @@ LANDING:	PUSH H
 	JMP MAIN
 
 BINGO:	LXI H,FOUNDIT
+	LDA ROUND
+	ADI 0x31
+	STA FOUNDIT0
 	JMP LANDING
 
 CURSOR:	; a = x. b = y
@@ -595,9 +668,10 @@ BLOCKIX: DS "Block index "
 	DB 0
 YOUTRIED: DS "You tried: "
 	DB 0
-FOUNDIT: DS "Well done!"
+FOUNDIT: DS "Well done! You guessed in "
+FOUNDIT0: DS " ! "
 	DB 0
-YOUSUCK: DS "You suck at this, doncha?"
+YOUSUCK: DS "You suck at this! Answer is: "
 	DB 0
 
 WORDNUM: DB 27,0
